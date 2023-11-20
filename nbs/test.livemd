@@ -1,0 +1,204 @@
+<!-- livebook:{"persist_outputs":true} -->
+
+# Untitled notebook
+
+## Section
+
+```elixir
+File.cwd!()
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+"/home/mvkvc/dev/monorepo/libs/ex/llama_cpp_ex"
+```
+
+```elixir
+defmodule PL do
+  @args ["-m", "../../../../llama.cpp/models/mistral-7b-instruct-v0.1.Q4_K_M.gguf", "-n", "128"]
+  @path Path.expand("./priv/main")
+  def prompt(text) do
+    new_args = @args ++ ["-p", text]
+    IO.inspect(new_args, label: "ARGS")
+    port = Port.open({:spawn_executable, @path}, [:binary, args: new_args])
+    IO.inspect(port, label: "PORT")
+    result = listen(port)
+    IO.inspect(result, label: "RESULT")
+    Port.close(port)
+  end
+
+  def listen(port, current_string \\ "") do
+    receive do
+      {^port, {:data, data}} ->
+        new_string = current_string <> data
+        listen(port, new_string)
+        IO.puts(new_string)
+
+      {^port, :eof} ->
+        IO.puts("EOF")
+        current_string
+
+      {^port, msg} ->
+        IO.inspect(msg)
+        listen(port, current_string)
+    end
+  end
+end
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+{:module, PL, <<70, 79, 82, 49, 0, 0, 12, ...>>, {:listen, 2}}
+```
+
+```elixir
+# flush()
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+nil
+```
+
+```elixir
+# PL.prompt("What are the 3 best things about Canada?")
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+nil
+```
+
+```elixir
+# send(port, {self(), :close}n) 
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+nil
+```
+
+```elixir
+defmodule PortsExample.BasicPort do
+  use GenServer
+  require Logger
+
+  # @command Path.expand("../../../../llama.cpp/main")
+  @command "#{:code.priv_dir(:llama_cpp)}/main"
+  @args [
+    "-m",
+    "../../../../llama.cpp/models/mistral-7b-instruct-v0.1.Q4_K_M.gguf",
+    "-n",
+    "128",
+    "-p"
+  ]
+
+  # GenServer API
+  def start_link(args \\ [], opts \\ []) do
+    GenServer.start_link(__MODULE__, args, opts)
+  end
+
+  def init(args \\ []) do
+    prompt = Keyword.get(args, :prompt, "")
+
+    port =
+      Port.open({:spawn_executable, @command}, [
+        :binary,
+        :exit_status,
+        args: Enum.concat(@args, [prompt])
+      ])
+
+    {:ok, %{output: "", exit_status: nil}}
+  end
+
+  # This callback handles data incoming from the command's STDOUT
+  def handle_info({port, {:data, text_line}}, state) do
+    %{output: output} = state
+    latest_output = output <> text_line
+    Logger.info("#{latest_output}")
+
+    {:noreply, %{state | output: latest_output}}
+  end
+
+  # This callback tells us when the process exits
+  def handle_info({port, {:exit_status, status}}, state) do
+    Logger.info("External exit: :exit_status: #{status}")
+    %{output: output} = state
+
+    # REMOVE PROMPT AND NEWLINE FROM OUTPUT AND PRINT
+    # ...
+
+    new_state = %{state | exit_status: status}
+    {:noreply, %{state | exit_status: status}}
+  end
+
+  # no-op catch-all callback for unhandled messages
+  def handle_info(_msg, state), do: {:noreply, state}
+end
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+warning: variable "port" is unused (if the variable is not meant to be used, prefix it with an underscore)
+  nbs/test.livemd#cell:6dgs3kwnjnzdsvslovowhcu5fqnbmiby:17: PortsExample.BasicPort.init/1
+
+warning: variable "port" is unused (if the variable is not meant to be used, prefix it with an underscore)
+  nbs/test.livemd#cell:6dgs3kwnjnzdsvslovowhcu5fqnbmiby:23: PortsExample.BasicPort.handle_info/2
+
+warning: variable "new_state" is unused (if the variable is not meant to be used, prefix it with an underscore)
+  nbs/test.livemd#cell:6dgs3kwnjnzdsvslovowhcu5fqnbmiby:39: PortsExample.BasicPort.handle_info/2
+
+warning: variable "output" is unused (if the variable is not meant to be used, prefix it with an underscore)
+  nbs/test.livemd#cell:6dgs3kwnjnzdsvslovowhcu5fqnbmiby:34: PortsExample.BasicPort.handle_info/2
+
+warning: variable "port" is unused (if the variable is not meant to be used, prefix it with an underscore)
+  nbs/test.livemd#cell:6dgs3kwnjnzdsvslovowhcu5fqnbmiby:32: PortsExample.BasicPort.handle_info/2
+
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+{:module, PortsExample.BasicPort, <<70, 79, 82, 49, 0, 0, 26, ...>>, {:handle_info, 2}}
+```
+
+```elixir
+{:ok, pid} = PortsExample.BasicPort.start_link(prompt: "What is the Queen of UK?")
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+{:ok, #PID<0.497.0>}
+```
+
+<!-- livebook:{"output":true} -->
+
+```
+
+04:01:27.084 [info]  What is the Queen of UK?
+
+04:01:27.864 [info]  What is the Queen of UK?
+
+
+04:01:28.003 [info]  What is the Queen of UK?
+El
+
+04:01:28.137 [info]  What is the Queen of UK?
+Eliz
+
+04:01:28.270 [info]  What is the Queen of UK?
+Elizabeth
+
+04:01:28.443 [info]  What is the Queen of UK?
+Elizabeth II
+
+04:01:28.721 [info] External exit: :exit_status: 0
+
+```
