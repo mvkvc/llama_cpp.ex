@@ -1,4 +1,5 @@
 .elixir_ls/
+.elixir-tools/
 *.code-workspace
 plts/
 priv/
